@@ -34,8 +34,7 @@ import {
 import { Transaction, UserStats, FinancialGoal, UserProfile } from "../types";
 import firebaseConfig from "../firebase-applet-config.json";
 
-// --- Configuration MyCloud Storage ---
-const myCloudApiKey = "mk_ca27b27d3b372836763b1ba744a3d9a8c8045fba73c0bc83";
+// --- Configuration MyCloud Storage (Bucket ID público / Chaves mantidas no backend) ---
 const bucketId = "ff8983b2-b94b-4b5e-8e49-0653905ee563";
 
 let app: FirebaseApp | undefined;
@@ -264,20 +263,17 @@ export const subscribeToStats = (uid: string, callback: (stats: UserStats) => vo
     });
 };
 
-// --- Storage API (MyCloud Object Storage) ---
+// --- Storage API (Proxied via Backend - Secrets remain in .env) ---
 export const storageAPI = {
     list: async () => {
-        const res = await fetch(`https://streamx.frontmk.online/api/storage/v1/buckets/${bucketId}/objects`, {
-            headers: { 'X-API-Key': myCloudApiKey }
-        });
+        const res = await fetch('/api/storage/objects');
         return await res.json();
     },
     upload: async (file: File) => {
         const fd = new FormData();
         fd.append('file', file);
-        const res = await fetch(`https://streamx.frontmk.online/api/storage/v1/buckets/${bucketId}/objects`, {
+        const res = await fetch('/api/storage/upload', {
             method: 'POST',
-            headers: { 'X-API-Key': myCloudApiKey },
             body: fd
         });
         return await res.json();
@@ -286,9 +282,8 @@ export const storageAPI = {
         return `https://streamx.frontmk.online/api/storage/v1/buckets/${bucketId}/objects/${fileId}/stream`;
     },
     delete: async (fileId: string) => {
-        const res = await fetch(`https://streamx.frontmk.online/api/storage/v1/buckets/${bucketId}/objects/${fileId}`, {
-            method: 'DELETE',
-            headers: { 'X-API-Key': myCloudApiKey }
+        const res = await fetch(`/api/storage/objects/${fileId}`, {
+            method: 'DELETE'
         });
         return await res.json();
     }
