@@ -1,6 +1,31 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
+import fs from "fs";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+
+// Initialize Firebase Admin
+try {
+  if (fs.existsSync("./serviceAccountKey.json")) {
+    const admin = require("firebase-admin");
+    const serviceAccount = require("./serviceAccountKey.json");
+    const apps = typeof admin.getApps === 'function' ? admin.getApps() : (admin.apps || []);
+    if (!apps.length) {
+      const certFn = admin.cert || (admin.credential && admin.credential.cert);
+      admin.initializeApp({
+        credential: certFn ? certFn(serviceAccount) : undefined,
+        databaseURL: "https://ths-construtora-default-rtdb.firebaseio.com"
+      });
+      console.log("Firebase Admin SDK initialized successfully");
+    }
+  } else {
+    console.warn("serviceAccountKey.json not found, Firebase Admin skipped.");
+  }
+} catch (error) {
+  console.error("Failed to initialize Firebase Admin:", error);
+}
 
 async function startServer() {
   const app = express();

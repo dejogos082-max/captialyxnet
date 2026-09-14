@@ -2,8 +2,16 @@ import React, { Component, ErrorInfo, ReactNode, Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 
-// Lazy load do App para garantir que erros de importação (Firebase) sejam capturados pelo ErrorBoundary
-const App = React.lazy(() => import('./App'));
+// Lazy load do App com retry automático para lidar com reinicialização do dev server ou oscilações de rede
+const App = React.lazy(async () => {
+  try {
+    return await import('./App');
+  } catch (err) {
+    console.warn("Falha ao carregar App.tsx, tentando novamente em 1s...", err);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return await import('./App');
+  }
+});
 
 // --- Global Error Boundary ---
 interface Props {

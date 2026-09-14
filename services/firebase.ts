@@ -52,7 +52,7 @@ try {
     
     if (app) {
         authInstance = getAuth(app);
-        dbInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+        dbInstance = getFirestore(app);
         try { authInstance.languageCode = 'pt'; } catch (e) {}
     }
 } catch (e: any) {

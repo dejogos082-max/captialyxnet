@@ -131,6 +131,39 @@ const useAuthSystem = (showToast: (msg: string, type: any) => void) => {
     return () => unsubscribe();
   }, []);
 
+  const formatAuthError = (err: any): string => {
+    const code = err?.code || '';
+    const message = err?.message || '';
+    if (code === 'auth/invalid-credential' || message.includes('invalid-credential')) {
+      return 'E-mail ou senha incorretos. Se ainda não possui cadastro neste novo projeto Firebase, clique na aba "Criar Conta".';
+    }
+    if (code === 'auth/user-not-found' || message.includes('user-not-found')) {
+      return 'Usuário não cadastrado. Por favor, crie uma conta para acessar.';
+    }
+    if (code === 'auth/wrong-password' || message.includes('wrong-password')) {
+      return 'Senha incorreta. Tente novamente ou recupere sua senha.';
+    }
+    if (code === 'auth/email-already-in-use' || message.includes('email-already-in-use')) {
+      return 'Este e-mail já está cadastrado. Faça login na sua conta existente.';
+    }
+    if (code === 'auth/weak-password' || message.includes('weak-password')) {
+      return 'A senha deve conter pelo menos 6 caracteres.';
+    }
+    if (code === 'auth/invalid-email' || message.includes('invalid-email')) {
+      return 'Formato de e-mail inválido.';
+    }
+    if (code === 'auth/popup-closed-by-user') {
+      return 'Janela de autenticação fechada antes da conclusão.';
+    }
+    if (code === 'auth/too-many-requests') {
+      return 'Muitas tentativas sem sucesso. Aguarde alguns instantes.';
+    }
+    if (code === 'auth/operation-not-allowed') {
+      return 'Este provedor de login precisa ser ativado no Firebase Console (Authentication > Sign-in method).';
+    }
+    return message || 'Erro na autenticação. Verifique suas credenciais.';
+  };
+
   const loginEmail = useCallback(async (email: string, pass: string) => {
      setProcessing(true);
      setError(null);
@@ -138,7 +171,7 @@ const useAuthSystem = (showToast: (msg: string, type: any) => void) => {
          await loginWithEmail(email, pass);
      } catch (err: any) {
          console.error("Login Error:", err);
-         setError(err.message || "Credenciais inválidas");
+         setError(formatAuthError(err));
      } finally {
          setProcessing(false);
      }
@@ -149,10 +182,10 @@ const useAuthSystem = (showToast: (msg: string, type: any) => void) => {
      setError(null);
      try {
          await registerWithEmail(email, pass);
-         showToast("Conta criada! Verifique seu e-mail.", 'success');
+         showToast("Conta criada com sucesso!", 'success');
      } catch (err: any) {
          console.error("Register Error:", err);
-         setError(err.message || "Erro ao criar conta");
+         setError(formatAuthError(err));
      } finally {
          setProcessing(false);
      }
@@ -170,7 +203,7 @@ const useAuthSystem = (showToast: (msg: string, type: any) => void) => {
          await resetPassword(email);
          return true;
      } catch(err: any) {
-         setError(err.message || "Erro ao recuperar senha");
+         setError(formatAuthError(err));
          return false;
      }
   }, []);
@@ -182,7 +215,7 @@ const useAuthSystem = (showToast: (msg: string, type: any) => void) => {
           if (provider === 'google') await loginWithGoogle();
           if (provider === 'github') await loginWithGithub();
       } catch (err: any) {
-          setError(err.message || `Erro no login com ${provider}`);
+          setError(formatAuthError(err));
       } finally {
           setProcessing(false);
       }

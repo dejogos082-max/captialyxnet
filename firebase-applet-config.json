@@ -1,12 +1,10 @@
 {
-  "projectId": "steadfast-prism-4vxch",
-  "appId": "1:319238617745:web:2b3ceb2d2988ca7f459d30",
-  "apiKey": "AIzaSyCIqOzZ2KSYUFXVkSSfyKraEtnaysaPy-w",
-  "authDomain": "steadfast-prism-4vxch.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-capitalyxfinance-56448da1-be75-4a7b-a138-cd8d96899431",
-  "storageBucket": "steadfast-prism-4vxch.firebasestorage.app",
-  "messagingSenderId": "319238617745",
-  "measurementId": "",
-  "oAuthClientId": "319238617745-3lhn22o9pj2283ed96nqetome1jagqdu.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "apiKey": "AIzaSyDjAsly915B-gO6z1VwDUfij7H5LsOQAcY",
+  "authDomain": "ths-construtora.firebaseapp.com",
+  "databaseURL": "https://ths-construtora-default-rtdb.firebaseio.com",
+  "projectId": "ths-construtora",
+  "storageBucket": "ths-construtora.firebasestorage.app",
+  "messagingSenderId": "416991425462",
+  "appId": "1:416991425462:web:286f4281c0bb18e42c8717",
+  "measurementId": "G-ZYGH7J160R"
 }
