@@ -89,21 +89,10 @@ const useToast = () => {
   return { toast, showToast, closeToast };
 };
 
-import { useAuth0 } from '@auth0/auth0-react';
-
 /**
  * Hook to manage Authentication Logic
  */
 const useAuthSystem = (showToast: (msg: string, type: any) => void) => {
-  const { 
-    user: auth0User, 
-    isAuthenticated, 
-    isLoading, 
-    loginWithPopup, 
-    logout: auth0Logout, 
-    error: auth0Error 
-  } = useAuth0();
-
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
@@ -111,79 +100,100 @@ const useAuthSystem = (showToast: (msg: string, type: any) => void) => {
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
-    if (auth0Error) {
-      setError(auth0Error.message);
-      showToast(auth0Error.message, 'error');
+    if (!auth) {
+      setLoading(false);
+      return;
     }
-  }, [auth0Error, showToast]);
-
-  // Sync Auth0 state with our UserProfile state
-  useEffect(() => {
-    if (isLoading) {
-       setLoading(true);
-       return;
-    }
-    
-    if (isAuthenticated && auth0User && auth0User.sub) {
-       const mappedUser: UserProfile = {
-          uid: auth0User.sub,
-          displayName: auth0User.name || auth0User.nickname || 'Usuário',
-          email: auth0User.email || null,
-          emailVerified: auth0User.email_verified || false,
-          photoURL: auth0User.picture || null,
-       };
-       setUser(mappedUser);
-       
-       // Try fetching extended data if available
-       getUserProfileData(auth0User.sub).then(dbProfile => {
-          if (dbProfile.displayName !== 'Offline') {
-            setUser({ ...mappedUser, ...dbProfile });
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const baseUser: UserProfile = {
+          uid: firebaseUser.uid,
+          displayName: firebaseUser.displayName || 'Usuário',
+          email: firebaseUser.email || null,
+          emailVerified: firebaseUser.emailVerified,
+          photoURL: firebaseUser.photoURL || null,
+        };
+        setUser(baseUser);
+        
+        // Save initial to DB & fetch extended
+        saveUserProfileToDB(firebaseUser);
+        getUserProfileData(firebaseUser.uid).then(dbProfile => {
+          if (dbProfile && dbProfile.displayName !== 'Offline') {
+            setUser(prev => prev ? { ...prev, ...dbProfile } : baseUser);
           }
-       }).catch(() => {});
-       
-    } else {
-       setUser(null);
-    }
-    setLoading(false);
-  }, [isAuthenticated, auth0User, isLoading]);
+        }).catch(() => {});
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const loginEmail = useCallback(async (email: string, pass: string) => {
      setProcessing(true);
-     await loginWithPopup({
-         authorizationParams: { login_hint: email }
-     });
-     setProcessing(false);
-  }, [loginWithPopup]);
+     setError(null);
+     try {
+         await loginWithEmail(email, pass);
+     } catch (err: any) {
+         console.error("Login Error:", err);
+         setError(err.message || "Credenciais inválidas");
+     } finally {
+         setProcessing(false);
+     }
+  }, []);
 
   const registerEmail = useCallback(async (email: string, pass: string) => {
      setProcessing(true);
-     await loginWithPopup({
-         authorizationParams: { screen_hint: 'signup', login_hint: email }
-     });
-     setProcessing(false);
-  }, [loginWithPopup]);
+     setError(null);
+     try {
+         await registerWithEmail(email, pass);
+         showToast("Conta criada! Verifique seu e-mail.", 'success');
+     } catch (err: any) {
+         console.error("Register Error:", err);
+         setError(err.message || "Erro ao criar conta");
+     } finally {
+         setProcessing(false);
+     }
+  }, [showToast]);
 
   const startPhoneAuth = useCallback(async (phone: string) => {
-     setError("SMS e Código não suportados via Auth0 nativo sem backend.");
+     setError("SMS e Código não suportados via Firebase sem App Check no momento.");
   }, []);
 
   const verifyOtp = useCallback(async (otp: string) => {}, []);
   const loginWithCode = useCallback(async (code: string) => {}, []);
-  const sendPasswordReset = useCallback(async (email: string) => { return true; }, []);
+  
+  const sendPasswordReset = useCallback(async (email: string) => { 
+     try {
+         await resetPassword(email);
+         return true;
+     } catch(err: any) {
+         setError(err.message || "Erro ao recuperar senha");
+         return false;
+     }
+  }, []);
+
   const loginSocial = useCallback(async (provider: 'google' | 'github') => {
       setProcessing(true);
-      await loginWithPopup({
-         authorizationParams: { connection: provider }
-      });
-      setProcessing(false);
-  }, [loginWithPopup]);
+      setError(null);
+      try {
+          if (provider === 'google') await loginWithGoogle();
+          if (provider === 'github') await loginWithGithub();
+      } catch (err: any) {
+          setError(err.message || `Erro no login com ${provider}`);
+      } finally {
+          setProcessing(false);
+      }
+  }, []);
 
   const performLogout = useCallback(async () => {
-     await auth0Logout({ logoutParams: { returnTo: window.location.origin } });
-  }, [auth0Logout]);
+     await firebaseLogout();
+  }, []);
 
   return {
-    user, loading, authMode, setAuthMode, error, setError,
+    user, setUser, loading, authMode, setAuthMode, error, setError,
     processing, loginSocial, loginEmail, registerEmail,
     startPhoneAuth, verifyOtp, loginWithCode, sendPasswordReset,
     performLogout
@@ -460,6 +470,24 @@ function App() {
 
                   {/* Alternative Login Options (iOS List Style) */}
                   <div className="bg-[#1c1c1e] rounded-xl overflow-hidden border border-white/[0.05] mt-6">
+                     <button type="button" onClick={() => loginSocial('google')} className="w-full relative border-b border-white/[0.05] flex items-center justify-between p-3.5 active:bg-white/[0.05] transition-colors">
+                        <div className="flex items-center gap-3">
+                            <div className="w-7 h-7 rounded-[8px] bg-red-500/10 flex items-center justify-center">
+                                <Chrome size={16} className="text-red-500" />
+                            </div>
+                            <span className="text-[17px] text-white">Google</span>
+                        </div>
+                        <ChevronRight size={18} className="text-slate-500" />
+                     </button>
+                     <button type="button" onClick={() => loginSocial('github')} className="w-full relative border-b border-white/[0.05] flex items-center justify-between p-3.5 active:bg-white/[0.05] transition-colors">
+                        <div className="flex items-center gap-3">
+                            <div className="w-7 h-7 rounded-[8px] bg-slate-500/10 flex items-center justify-center">
+                                <Github size={16} className="text-slate-200" />
+                            </div>
+                            <span className="text-[17px] text-white">GitHub</span>
+                        </div>
+                        <ChevronRight size={18} className="text-slate-500" />
+                     </button>
                      <button type="button" onClick={() => setAuthMode('phone')} className="w-full relative border-b border-white/[0.05] flex items-center justify-between p-3.5 active:bg-white/[0.05] transition-colors">
                         <div className="flex items-center gap-3">
                             <div className="w-7 h-7 rounded-[8px] bg-emerald-500/10 flex items-center justify-center">

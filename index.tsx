@@ -1,7 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode, Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
-import { Auth0Provider } from '@auth0/auth0-react';
 
 // Lazy load do App para garantir que erros de importação (Firebase) sejam capturados pelo ErrorBoundary
 const App = React.lazy(() => import('./App'));
@@ -79,17 +78,9 @@ if (rootElement) {
   root.render(
     <React.StrictMode>
       <GlobalErrorBoundary>
-        <Auth0Provider
-          domain={import.meta.env.VITE_AUTH0_DOMAIN || "frontnet.us.auth0.com"}
-          clientId={import.meta.env.VITE_AUTH0_CLIENT_ID || "PkHbXHXG20aMexgbX4z41EmtTEYwe3h7"}
-          authorizationParams={{
-            redirect_uri: window.location.origin
-          }}
-        >
-          <Suspense fallback={<LoadingScreen />}>
-            <App />
-          </Suspense>
-        </Auth0Provider>
+        <Suspense fallback={<LoadingScreen />}>
+          <App />
+        </Suspense>
       </GlobalErrorBoundary>
     </React.StrictMode>
   );

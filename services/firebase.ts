@@ -19,36 +19,36 @@ import {
   ConfirmationResult
 } from "firebase/auth";
 import { 
-  getDatabase, 
-  ref, 
-  push, 
-  onValue, 
-  remove, 
-  set, 
-  off, 
-  update, 
-  get, 
-  Database,
-  DataSnapshot 
-} from "firebase/database";
+  getFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  addDoc, 
+  onSnapshot, 
+  updateDoc, 
+  deleteDoc, 
+  getDoc,
+  query,
+  orderBy,
+  Firestore
+} from "firebase/firestore";
 import { Transaction, UserStats, FinancialGoal, UserProfile } from "../types";
 
 // --- Configuration ---
 const firebaseConfig = {
-  apiKey: "AIzaSyCdAoxxkk9asrhoXJB-iySix-gG14B6qlI",
-  authDomain: "gestaoapp-baac6.firebaseapp.com",
-  databaseURL: "https://gestaoapp-baac6-default-rtdb.firebaseio.com",
-  projectId: "gestaoapp-baac6",
-  storageBucket: "gestaoapp-baac6.firebasestorage.app",
-  messagingSenderId: "965601428152",
-  appId: "1:965601428152:web:3c25d32c111e03c6f32a4d",
-  measurementId: "G-2BXS6KL8JK"
+  projectId: "steadfast-prism-4vxch",
+  appId: "1:319238617745:web:2b3ceb2d2988ca7f459d30",
+  apiKey: "AIzaSyCIqOzZ2KSYUFXVkSSfyKraEtnaysaPy-w",
+  authDomain: "steadfast-prism-4vxch.firebaseapp.com",
+  storageBucket: "steadfast-prism-4vxch.firebasestorage.app",
+  messagingSenderId: "319238617745",
+  measurementId: ""
 };
 
 // --- Singleton Instances ---
 let app: FirebaseApp | undefined;
 let authInstance: Auth | undefined;
-let dbInstance: Database | undefined;
+let dbInstance: Firestore | undefined;
 let initError: Error | null = null;
 
 // --- Defensive Initialization ---
@@ -63,9 +63,8 @@ try {
     
     if (app) {
         authInstance = getAuth(app);
-        dbInstance = getDatabase(app);
+        dbInstance = getFirestore(app);
         
-        // Tentar configurar idioma, falha silenciosa se não suportado
         try {
             authInstance.languageCode = 'pt';
         } catch (langError) {
@@ -78,7 +77,6 @@ try {
 }
 
 // --- Safe Exports ---
-// O consumidor (App.tsx) deve verificar a existência dessas instâncias
 export const auth = authInstance!;
 export const db = dbInstance!;
 export const firebaseInitializationError = initError;
@@ -141,10 +139,8 @@ export const logout = async (): Promise<void> => {
 };
 
 // --- Phone Authentication ---
-
 export const setupRecaptcha = (containerId: string): RecaptchaVerifier => {
   ensureAuth();
-  // Limpa verificador existente se houver para evitar conflitos de re-render
   if (window.recaptchaVerifier) {
       window.recaptchaVerifier.clear();
       window.recaptchaVerifier = undefined;
@@ -164,7 +160,6 @@ export const loginWithPhone = async (phoneNumber: string, appVerifier: Recaptcha
 };
 
 // --- Login Code System (Passwordless for secondary devices) ---
-
 export interface LoginCodeData {
   code: string;
   expiresAt: number;
@@ -173,57 +168,50 @@ export interface LoginCodeData {
 
 export const generateLoginCode = async (uid: string): Promise<LoginCodeData> => {
   ensureDb();
-  const userCodeRef = ref(db, `users/${uid}/security/loginCode`);
-  const snapshot = await get(userCodeRef);
+  const userCodeRef = doc(db, `users/${uid}/security/loginCode`);
+  const snapshot = await getDoc(userCodeRef);
   const now = Date.now();
 
-  // Verifica Cooldown de 24 horas
   if (snapshot.exists()) {
-    const existingData = snapshot.val();
+    const existingData = snapshot.data();
     if (existingData.createdAt && (now - existingData.createdAt < 24 * 60 * 60 * 1000)) {
         throw new Error("COOLDOWN");
     }
-    // Remove código antigo do índice global
     if (existingData.code) {
-        await remove(ref(db, `login_codes/${existingData.code}`));
+        await deleteDoc(doc(db, `login_codes/${existingData.code}`));
     }
   }
 
-  // Gera novo código
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = now + (7 * 24 * 60 * 60 * 1000); // 7 dias
   
-  // Salva no índice global (para busca rápida no login)
-  await set(ref(db, `login_codes/${code}`), { uid, expiresAt });
+  await setDoc(doc(db, `login_codes/${code}`), { uid, expiresAt });
 
-  // Salva no perfil do usuário
   const codeData: LoginCodeData = { code, expiresAt, createdAt: now };
-  await set(userCodeRef, codeData);
+  await setDoc(userCodeRef, codeData);
 
   return codeData;
 };
 
 export const getStoredLoginCode = async (uid: string): Promise<LoginCodeData | null> => {
   ensureDb();
-  const snapshot = await get(ref(db, `users/${uid}/security/loginCode`));
+  const snapshot = await getDoc(doc(db, `users/${uid}/security/loginCode`));
   if (snapshot.exists()) {
-    return snapshot.val();
+    return snapshot.data() as LoginCodeData;
   }
   return null;
 };
 
 export const verifyLoginCode = async (code: string): Promise<{ uid: string, expiresAt: number } | null> => {
   ensureDb();
-  const snapshot = await get(ref(db, `login_codes/${code}`));
+  const snapshot = await getDoc(doc(db, `login_codes/${code}`));
   
   if (snapshot.exists()) {
-    const data = snapshot.val();
-    // Verifica validade
+    const data = snapshot.data();
     if (Date.now() < data.expiresAt) {
-      return data;
+      return data as { uid: string, expiresAt: number };
     } else {
-      // Código expirado, limpa
-      await remove(ref(db, `login_codes/${code}`));
+      await deleteDoc(doc(db, `login_codes/${code}`));
       return null;
     }
   }
@@ -231,21 +219,19 @@ export const verifyLoginCode = async (code: string): Promise<{ uid: string, expi
 };
 
 // --- User Profile Management ---
-
 export const saveUserProfileToDB = async (user: User): Promise<void> => {
     if (!db) return;
     try {
-        const profileRef = ref(db, `users/${user.uid}/profile`);
-        // Atualiza apenas campos essenciais para não sobrescrever dados customizados
-        await update(profileRef, {
+        const profileRef = doc(db, `users/${user.uid}/profile/data`);
+        await setDoc(profileRef, {
             email: user.email,
             emailVerified: user.emailVerified,
             lastLogin: Date.now(),
             ...(user.displayName ? { displayName: user.displayName } : {}),
             ...(user.photoURL ? { photoURL: user.photoURL } : {})
-        });
+        }, { merge: true });
     } catch(e) {
-        console.warn("Background profile sync failed (possibly offline):", e);
+        console.warn("Background profile sync failed:", e);
     }
 };
 
@@ -255,17 +241,14 @@ export const updateUserProfileData = async (uid: string, data: Partial<UserProfi
     if (!auth.currentUser) throw new Error("Você precisa estar autenticado.");
     if (auth.currentUser.uid !== uid) throw new Error("Permissão negada: ID incompatível.");
 
-    const profileRef = ref(db, `users/${uid}/profile`);
-    
-    // Sanitiza undefined para evitar erros do Firebase
+    const profileRef = doc(db, `users/${uid}/profile/data`);
     const sanitizedData = Object.entries(data).reduce((acc, [key, value]) => {
         if (value !== undefined) acc[key] = value;
         return acc;
     }, {} as any);
 
-    await update(profileRef, sanitizedData);
+    await setDoc(profileRef, sanitizedData, { merge: true });
     
-    // Sincroniza Auth Profile se necessário
     if (auth.currentUser && auth.currentUser.uid === uid) {
         const authUpdates: any = {};
         if (sanitizedData.displayName) authUpdates.displayName = sanitizedData.displayName;
@@ -275,21 +258,19 @@ export const updateUserProfileData = async (uid: string, data: Partial<UserProfi
         if (Object.keys(authUpdates).length > 0) {
             try { 
                 await updateProfile(auth.currentUser, authUpdates); 
-            } catch (e) { 
-                console.warn("Auth profile sync failed (minor issue):", e); 
-            }
+            } catch (e) {}
         }
     }
 };
 
 export const getUserProfileData = async (uid: string): Promise<UserProfile> => {
-    if (!db) return { uid: uid, displayName: 'Offline', email: 'N/A', emailVerified: false, photoURL: null };
+    if (!db) return { uid, displayName: 'Offline', email: 'N/A', emailVerified: false, photoURL: null };
     try {
-        const snapshot = await get(ref(db, `users/${uid}/profile`));
+        const snapshot = await getDoc(doc(db, `users/${uid}/profile/data`));
         if (snapshot.exists()) {
-            const data = snapshot.val();
+            const data = snapshot.data();
             return {
-                uid: uid,
+                uid,
                 displayName: data.displayName || 'Usuário',
                 email: data.email || 'email@oculto.com',
                 photoURL: data.photoURL || null,
@@ -303,110 +284,89 @@ export const getUserProfileData = async (uid: string): Promise<UserProfile> => {
             };
         }
     } catch (e) {
-        console.warn("Erro ao buscar perfil (offline?):", e);
+        console.warn("Erro ao buscar perfil:", e);
     }
 
-    return {
-        uid: uid,
-        displayName: 'Usuário (Offline)',
-        email: 'N/A',
-        emailVerified: true,
-        photoURL: null
-    };
+    return { uid, displayName: 'Usuário', email: 'N/A', emailVerified: true, photoURL: null };
 };
 
 // --- Transaction Management ---
-
 export const addTransaction = async (uid: string, transaction: Omit<Transaction, 'id'>): Promise<void> => {
   ensureDb();
-  const newRef = push(ref(db, `users/${uid}/transactions`));
-  await set(newRef, { ...transaction, id: newRef.key });
+  const txCol = collection(db, `users/${uid}/transactions`);
+  await addDoc(txCol, transaction);
 };
 
 export const deleteTransaction = async (uid: string, transactionId: string): Promise<void> => {
   ensureDb();
-  await remove(ref(db, `users/${uid}/transactions/${transactionId}`));
+  await deleteDoc(doc(db, `users/${uid}/transactions/${transactionId}`));
 };
 
-// Type definition for Unsubscribe function
 type Unsubscribe = () => void;
 
 export const subscribeToTransactions = (uid: string, callback: (data: Transaction[]) => void): Unsubscribe => {
   if (!db) return () => {};
-  const q = ref(db, `users/${uid}/transactions`);
+  const txCol = collection(db, `users/${uid}/transactions`);
   
-  const handleValue = (snapshot: DataSnapshot) => {
-    const data = snapshot.val();
-    const parsedData: Transaction[] = data 
-        ? Object.keys(data).map(k => ({ ...data[k], id: k })) 
-        : [];
-    
-    // Sort by Date Descending
-    parsedData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    
-    callback(parsedData);
-  };
-  
-  onValue(q, handleValue, (error) => {
-      console.warn("Transaction subscription error (permissions?):", error);
-      callback([]); 
+  return onSnapshot(txCol, (snapshot) => {
+    const data: Transaction[] = [];
+    snapshot.forEach(docSnap => {
+      data.push({ ...docSnap.data(), id: docSnap.id } as Transaction);
+    });
+    data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    callback(data);
+  }, (error) => {
+    console.warn("Transaction subscription error:", error);
+    callback([]);
   });
-  
-  return () => off(q, 'value', handleValue);
 };
 
 // --- Goal Management ---
-
 export const addGoal = async (uid: string, goal: Omit<FinancialGoal, 'id'>): Promise<void> => {
   ensureDb();
-  const newRef = push(ref(db, `users/${uid}/goals`));
-  await set(newRef, { ...goal, id: newRef.key, createdAt: Date.now() });
+  const goalCol = collection(db, `users/${uid}/goals`);
+  await addDoc(goalCol, { ...goal, createdAt: Date.now() });
 };
 
 export const updateGoal = async (uid: string, goalId: string, updates: Partial<FinancialGoal>): Promise<void> => {
   ensureDb();
-  await update(ref(db, `users/${uid}/goals/${goalId}`), updates);
+  await updateDoc(doc(db, `users/${uid}/goals/${goalId}`), updates);
 };
 
 export const deleteGoal = async (uid: string, goalId: string): Promise<void> => {
   ensureDb();
-  await remove(ref(db, `users/${uid}/goals/${goalId}`));
+  await deleteDoc(doc(db, `users/${uid}/goals/${goalId}`));
 };
 
 export const subscribeToGoals = (uid: string, callback: (data: FinancialGoal[]) => void): Unsubscribe => {
   if (!db) return () => {};
-  const q = ref(db, `users/${uid}/goals`);
+  const goalCol = collection(db, `users/${uid}/goals`);
   
-  const handleValue = (snapshot: DataSnapshot) => {
-    const data = snapshot.val();
-    const parsedData: FinancialGoal[] = data 
-        ? Object.keys(data).map(k => ({ ...data[k], id: k })) 
-        : [];
-    callback(parsedData);
-  };
-  
-  onValue(q, handleValue, (err) => callback([]));
-  return () => off(q, 'value', handleValue);
+  return onSnapshot(goalCol, (snapshot) => {
+    const data: FinancialGoal[] = [];
+    snapshot.forEach(docSnap => {
+      data.push({ ...docSnap.data(), id: docSnap.id } as FinancialGoal);
+    });
+    callback(data);
+  }, (err) => callback([]));
 };
 
-// --- User Stats & Achievements ---
-
+// --- User Stats ---
 export const markAIUsage = async (uid: string): Promise<void> => {
   if (!db) return;
   try {
-     await update(ref(db, `users/${uid}/stats`), { 
+     await setDoc(doc(db, `users/${uid}/stats/data`), { 
          hasUsedAI: true,
          lastAnalysisDate: Date.now() 
-     });
+     }, { merge: true });
   } catch (e) { console.warn("Failed to mark AI usage", e); }
 };
 
 export const subscribeToStats = (uid: string, callback: (stats: UserStats) => void): Unsubscribe => {
   if (!db) return () => {};
-  const q = ref(db, `users/${uid}/stats`);
+  const statsDoc = doc(db, `users/${uid}/stats/data`);
   
-  const handleValue = (snapshot: DataSnapshot) => callback(snapshot.val() || {});
-  onValue(q, handleValue, (err) => callback({}));
-  
-  return () => off(q, 'value', handleValue);
+  return onSnapshot(statsDoc, (snapshot) => {
+    callback((snapshot.data() as UserStats) || {});
+  }, (err) => callback({}));
 };
