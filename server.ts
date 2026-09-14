@@ -3,19 +3,17 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import fs from "fs";
-import { createRequire } from "module";
 import multer from "multer";
 import { GoogleGenAI, Type } from "@google/genai";
-
-const require = createRequire(import.meta.url);
+import admin from "firebase-admin";
 
 // Initialize Firebase Admin (Backend only)
 try {
-  const admin = require("firebase-admin");
-  const apps = typeof admin.getApps === "function" ? admin.getApps() : (admin.apps || []);
+  const adminObj: any = (admin as any).default || admin;
+  const apps = typeof adminObj.getApps === "function" ? adminObj.getApps() : (adminObj.apps || []);
   if (!apps.length) {
     let credential: any = null;
-    const certFn = admin.cert || (admin.credential && admin.credential.cert);
+    const certFn = adminObj.cert || (adminObj.credential && adminObj.credential.cert);
 
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
       try {
@@ -29,12 +27,16 @@ try {
     }
 
     if (!credential && fs.existsSync("./serviceAccountKey.json")) {
-      const serviceAccount = require("./serviceAccountKey.json");
-      if (certFn) credential = certFn(serviceAccount);
+      try {
+        const serviceAccount = JSON.parse(fs.readFileSync("./serviceAccountKey.json", "utf-8"));
+        if (certFn) credential = certFn(serviceAccount);
+      } catch (err) {
+        console.warn("Could not read serviceAccountKey.json:", err);
+      }
     }
 
     if (credential) {
-      admin.initializeApp({
+      adminObj.initializeApp({
         credential,
         databaseURL: process.env.FIREBASE_DATABASE_URL || "https://ths-construtora-default-rtdb.firebaseio.com"
       });
@@ -66,7 +68,7 @@ const upload = multer({
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
   app.set("trust proxy", 1);
   app.use(express.json({ limit: "10mb" }));
