@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { onAuthStateChanged, ConfirmationResult } from 'firebase/auth';
 import { 
   auth, 
+  onAuthStateChanged,
   firebaseInitializationError,
   loginWithGoogle, 
   loginWithGithub, 
@@ -258,7 +258,7 @@ function App() {
                   </div>
                   <h1 className="text-2xl font-bold mb-4">Sistema Indisponível</h1>
                   <p className="text-slate-400 mb-6 leading-relaxed">
-                      Não foi possível conectar aos servidores de dados. Isso geralmente ocorre devido a bloqueadores de rede, firewalls corporativos ou falha na conexão.
+                      Não foi possível conectar aos servidores de dados. Verifique a configuração do banco de dados (Project ID e DB ID podem estar em conflito).
                   </p>
                   <button onClick={() => window.location.reload()} className="bg-primary hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-bold w-full transition-all">
                       Recarregar Aplicação
