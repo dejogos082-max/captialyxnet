@@ -99,7 +99,7 @@ const useAuthSystem = (showToast: (msg: string, type: any) => void) => {
     user: auth0User, 
     isAuthenticated, 
     isLoading, 
-    loginWithRedirect, 
+    loginWithPopup, 
     logout: auth0Logout, 
     error: auth0Error 
   } = useAuth0();
@@ -149,19 +149,19 @@ const useAuthSystem = (showToast: (msg: string, type: any) => void) => {
 
   const loginEmail = useCallback(async (email: string, pass: string) => {
      setProcessing(true);
-     await loginWithRedirect({
+     await loginWithPopup({
          authorizationParams: { login_hint: email }
      });
      setProcessing(false);
-  }, [loginWithRedirect]);
+  }, [loginWithPopup]);
 
   const registerEmail = useCallback(async (email: string, pass: string) => {
      setProcessing(true);
-     await loginWithRedirect({
+     await loginWithPopup({
          authorizationParams: { screen_hint: 'signup', login_hint: email }
      });
      setProcessing(false);
-  }, [loginWithRedirect]);
+  }, [loginWithPopup]);
 
   const startPhoneAuth = useCallback(async (phone: string) => {
      setError("SMS e Código não suportados via Auth0 nativo sem backend.");
@@ -170,7 +170,13 @@ const useAuthSystem = (showToast: (msg: string, type: any) => void) => {
   const verifyOtp = useCallback(async (otp: string) => {}, []);
   const loginWithCode = useCallback(async (code: string) => {}, []);
   const sendPasswordReset = useCallback(async (email: string) => { return true; }, []);
-  const loginSocial = useCallback(async (p: any) => {}, []);
+  const loginSocial = useCallback(async (provider: 'google' | 'github') => {
+      setProcessing(true);
+      await loginWithPopup({
+         authorizationParams: { connection: provider }
+      });
+      setProcessing(false);
+  }, [loginWithPopup]);
 
   const performLogout = useCallback(async () => {
      await auth0Logout({ logoutParams: { returnTo: window.location.origin } });

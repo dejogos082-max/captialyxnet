@@ -6,6 +6,9 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
+  // Configuração para proxies (Cloudflare, Railway, etc)
+  app.set('trust proxy', 1);
+
   // Middlewares
   app.use(express.json());
 
@@ -27,14 +30,20 @@ async function startServer() {
     // Modo de Produção (ex: na Railway)
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*all', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
+
+  // Resolução de erro 502 (Bad Gateway) com Cloudflare/Proxies
+  // O Node.js padrão fecha conexões após 5s, mas o Cloudflare mantém por ~60s.
+  // Se o Cloudflare usar uma conexão recém-fechada pelo Node, ocorre o Erro 502.
+  server.keepAliveTimeout = 65000; // 65 segundos
+  server.headersTimeout = 66000; // 66 segundos
 }
 
 startServer();
