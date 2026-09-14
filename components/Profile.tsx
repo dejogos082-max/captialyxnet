@@ -61,21 +61,41 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, onUpdateUser, onS
     setErrorMsg(null);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (isReadOnly) return;
     const file = e.target.files?.[0];
     if (file) {
-        // Limite reduzido para 1MB
-        if (file.size > 1 * 1024 * 1024) {
-            onShowToast("A imagem deve ter no máximo 1MB.");
+        if (file.size > 2 * 1024 * 1024) {
+            onShowToast("A imagem deve ter no máximo 2MB.");
             return;
         }
 
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            setFormData(prev => ({ ...prev, photoURL: reader.result as string }));
-        };
-        reader.readAsDataURL(file);
+        setLoading(true);
+        try {
+            const { storageAPI } = await import('../services/firebase');
+            onShowToast("Fazendo upload da imagem...");
+            const res = await storageAPI.upload(file);
+            
+            // The API returns a publicUrl or viewUrl we can use directly in <img> tags
+            const finalUrl = res.publicUrl || res.publicViewUrl || res.viewUrl || res.url;
+            if (finalUrl) {
+                setFormData(prev => ({ ...prev, photoURL: finalUrl }));
+                onShowToast("Upload concluído! Salve o perfil para aplicar.");
+            } else if (res.id) {
+                // Fallback to stream URL if no public URL was provided
+                const streamUrl = storageAPI.getStreamUrl(res.id);
+                setFormData(prev => ({ ...prev, photoURL: streamUrl }));
+                onShowToast("Upload concluído! Salve o perfil para aplicar.");
+            } else {
+                console.error("Upload response:", res);
+                onShowToast("Erro ao obter URL da imagem.");
+            }
+        } catch (error: any) {
+            console.error("Upload error:", error);
+            onShowToast("Erro no upload da imagem.");
+        } finally {
+            setLoading(false);
+        }
     }
   };
 
